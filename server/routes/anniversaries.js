@@ -18,6 +18,10 @@ function getDaysUntil(dateStr) {
 router.get('/person/:personId', async (req, res) => {
   try {
     const { personId } = req.params;
+    const [people] = await pool.query('SELECT id FROM people WHERE id = ?', [personId]);
+    if (people.length === 0) {
+      return res.status(404).json({ code: 404, message: '人物不存在', data: null });
+    }
     const [rows] = await pool.query('SELECT * FROM anniversaries WHERE person_id = ? ORDER BY date', [personId]);
     res.json({
       code: 0,
@@ -33,8 +37,18 @@ router.get('/person/:personId', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { person_id, title, date, type = 'custom' } = req.body;
-    if (!person_id || !title || !date) {
-      return res.status(400).json({ code: 400, message: '人物ID、纪念日名称、日期为必填项', data: null });
+    if (!person_id) {
+      return res.status(400).json({ code: 400, message: '人物ID不能为空', data: null });
+    }
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ code: 400, message: '纪念日名称不能为空', data: null });
+    }
+    if (!date) {
+      return res.status(400).json({ code: 400, message: '纪念日日期不能为空', data: null });
+    }
+    const [people] = await pool.query('SELECT id FROM people WHERE id = ?', [person_id]);
+    if (people.length === 0) {
+      return res.status(404).json({ code: 404, message: '人物不存在', data: null });
     }
     const [result] = await pool.query(
       'INSERT INTO anniversaries (person_id, title, date, type) VALUES (?, ?, ?, ?)',
@@ -55,8 +69,15 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { title, date } = req.body;
-    if (!title || !date) {
-      return res.status(400).json({ code: 400, message: '纪念日名称、日期为必填项', data: null });
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ code: 400, message: '纪念日名称不能为空', data: null });
+    }
+    if (!date) {
+      return res.status(400).json({ code: 400, message: '纪念日日期不能为空', data: null });
+    }
+    const [existing] = await pool.query('SELECT id FROM anniversaries WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ code: 404, message: '纪念日不存在', data: null });
     }
     await pool.query(
       'UPDATE anniversaries SET title = ?, date = ? WHERE id = ?',
@@ -76,6 +97,10 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const [existing] = await pool.query('SELECT id FROM anniversaries WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ code: 404, message: '纪念日不存在', data: null });
+    }
     await pool.query('DELETE FROM anniversaries WHERE id = ?', [id]);
     res.json({
       code: 0,

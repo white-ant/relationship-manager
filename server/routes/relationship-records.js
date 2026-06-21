@@ -92,6 +92,11 @@ router.get('/people/:personId/relationship-records', async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 5;
     const offset = (page - 1) * pageSize;
 
+    const [people] = await pool.query('SELECT id FROM people WHERE id = ?', [personId]);
+    if (people.length === 0) {
+      return res.status(404).json({ code: 404, message: '人物不存在', data: null });
+    }
+
     const [countResult] = await pool.query(
       'SELECT COUNT(*) as total FROM relationship_records WHERE person_id = ?',
       [personId]
@@ -244,6 +249,11 @@ router.delete('/relationship-records/:id', async (req, res) => {
 router.get('/people/:personId/statistics', async (req, res) => {
   try {
     const { personId } = req.params;
+
+    const [people] = await pool.query('SELECT id FROM people WHERE id = ?', [personId]);
+    if (people.length === 0) {
+      return res.status(404).json({ code: 404, message: '人物不存在', data: null });
+    }
 
     const [giftResult] = await pool.query(
       'SELECT COUNT(*) as gift_count FROM relationship_records WHERE person_id = ? AND category = ?',

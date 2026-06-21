@@ -123,6 +123,18 @@ const form = ref({
   anniversaries: []
 })
 
+function formatDateForInput(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return String(value).slice(0, 10)
+  }
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 function goBack() {
   router.back()
 }
@@ -202,15 +214,16 @@ async function loadData() {
     const data = res.data
     form.value.name = data.name
     form.value.avatar = data.avatar || ''
-    form.value.birthday = data.birthday
+    form.value.birthday = formatDateForInput(data.birthday)
     form.value.relation = data.relation
     form.value.contact = data.contact || ''
     form.value.anniversaries = (data.anniversaries || [])
       .filter(a => a.type === 'custom')
-      .map(a => ({ title: a.title, date: a.date }))
+      .map(a => ({ title: a.title, date: formatDateForInput(a.date) }))
   } catch (e) {
     console.error(e)
-    showToast('加载失败')
+    const msg = e?.message || '加载失败'
+    showToast(msg)
   } finally {
     loading.value = false
   }
@@ -228,6 +241,8 @@ async function handleSave() {
     }, 500)
   } catch (err) {
     console.error(err)
+    const msg = err?.message || '保存失败，请重试'
+    showToast(msg)
   } finally {
     closeToast()
   }

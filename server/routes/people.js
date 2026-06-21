@@ -79,8 +79,26 @@ router.post('/', async (req, res) => {
     await connection.beginTransaction();
     const { name, avatar, birthday, relation, contact, anniversaries = [] } = req.body;
 
-    if (!name || !birthday || !relation) {
-      return res.status(400).json({ code: 400, message: '姓名、生日、关系为必填项', data: null });
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ code: 400, message: '姓名不能为空', data: null });
+    }
+    if (!birthday) {
+      return res.status(400).json({ code: 400, message: '生日不能为空', data: null });
+    }
+    if (!relation) {
+      return res.status(400).json({ code: 400, message: '关系不能为空', data: null });
+    }
+
+    if (!Array.isArray(anniversaries)) {
+      return res.status(400).json({ code: 400, message: '纪念日格式错误', data: null });
+    }
+    for (const [idx, anniv] of anniversaries.entries()) {
+      if (!anniv.title || !String(anniv.title).trim()) {
+        return res.status(400).json({ code: 400, message: `纪念日 ${idx + 1} 的名称不能为空`, data: null });
+      }
+      if (!anniv.date) {
+        return res.status(400).json({ code: 400, message: `纪念日 ${idx + 1} 的日期不能为空`, data: null });
+      }
     }
 
     const [result] = await connection.query(
@@ -125,8 +143,31 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { name, avatar, birthday, relation, contact, anniversaries = [] } = req.body;
 
-    if (!name || !birthday || !relation) {
-      return res.status(400).json({ code: 400, message: '姓名、生日、关系为必填项', data: null });
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ code: 400, message: '姓名不能为空', data: null });
+    }
+    if (!birthday) {
+      return res.status(400).json({ code: 400, message: '生日不能为空', data: null });
+    }
+    if (!relation) {
+      return res.status(400).json({ code: 400, message: '关系不能为空', data: null });
+    }
+
+    if (!Array.isArray(anniversaries)) {
+      return res.status(400).json({ code: 400, message: '纪念日格式错误', data: null });
+    }
+    for (const [idx, anniv] of anniversaries.entries()) {
+      if (!anniv.title || !String(anniv.title).trim()) {
+        return res.status(400).json({ code: 400, message: `纪念日 ${idx + 1} 的名称不能为空`, data: null });
+      }
+      if (!anniv.date) {
+        return res.status(400).json({ code: 400, message: `纪念日 ${idx + 1} 的日期不能为空`, data: null });
+      }
+    }
+
+    const [existingPeople] = await connection.query('SELECT id FROM people WHERE id = ?', [id]);
+    if (existingPeople.length === 0) {
+      return res.status(404).json({ code: 404, message: '人物不存在', data: null });
     }
 
     await connection.query(
@@ -179,7 +220,10 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
 
     const [people] = await connection.query('SELECT avatar FROM people WHERE id = ?', [id]);
-    if (people.length > 0 && people[0].avatar) {
+    if (people.length === 0) {
+      return res.status(404).json({ code: 404, message: '人物不存在', data: null });
+    }
+    if (people[0].avatar) {
       const avatarPath = path.join(__dirname, '..', people[0].avatar);
       if (fs.existsSync(avatarPath)) {
         fs.unlinkSync(avatarPath);
@@ -187,6 +231,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     await connection.query('DELETE FROM anniversaries WHERE person_id = ?', [id]);
+    await connection.query('DELETE FROM relationship_records WHERE person_id = ?', [id]);
     await connection.query('DELETE FROM people WHERE id = ?', [id]);
 
     await connection.commit();

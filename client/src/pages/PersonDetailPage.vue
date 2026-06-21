@@ -78,7 +78,8 @@
         <div class="add-record-btn" @click="openAddForm">+ 新增</div>
       </div>
 
-      <div v-if="records.length === 0" class="empty-tip">
+      <div v-if="recordsLoading" class="empty-tip">加载中...</div>
+      <div v-else-if="records.length === 0" class="empty-tip">
         暂无人情往来记录
       </div>
 
@@ -87,11 +88,10 @@
           v-for="record in records"
           :key="record.id"
           class="record-card"
-          @click="openEditForm(record)"
         >
           <div class="record-header">
             <span class="record-type-tag" :class="getRecordTagClass(record)">{{ record.type_name }}</span>
-            <span class="record-date">{{ formatDateShort(record.record_date) }}</span>
+            <span class="record-date">{{ formatDateForDisplay(record.record_date) }}</span>
           </div>
           <div class="record-body">
             <template v-if="record.category === 'money'">
@@ -101,7 +101,7 @@
             </template>
             <template v-else>
               <span class="record-gift-name">
-                🎁 {{ record.gift_name }}
+                🎁 {{ record.gift_name || '(无名称)' }}
               </span>
               <img v-if="record.gift_image" :src="record.gift_image" class="record-gift-thumb" @click.stop="previewImage(record.gift_image)" />
             </template>
@@ -114,9 +114,9 @@
         </div>
 
         <div v-if="pagination.totalPages > 1" class="pagination">
-          <van-button size="small" :disabled="pagination.page <= 1" @click="changePage(pagination.page - 1)">上一页</van-button>
+          <button class="page-btn" :disabled="pagination.page <= 1" @click="changePage(pagination.page - 1)">上一页</button>
           <span class="page-info">{{ pagination.page }} / {{ pagination.totalPages }}</span>
-          <van-button size="small" :disabled="pagination.page >= pagination.totalPages" @click="changePage(pagination.page + 1)">下一页</van-button>
+          <button class="page-btn" :disabled="pagination.page >= pagination.totalPages" @click="changePage(pagination.page + 1)">下一页</button>
         </div>
       </div>
 
@@ -142,107 +142,157 @@
       </div>
     </div>
 
-    <van-popup v-model:show="showForm" position="bottom" round :style="{ maxHeight: '90vh' }" closeable>
-      <div class="form-container">
-        <div class="form-title">{{ isEditing ? '编辑人情往来' : '新增人情往来' }}</div>
+    <div v-if="showForm" class="form-mask" @click.self="closeForm">
+      <div class="form-sheet">
+        <div class="form-sheet-header">
+          <span class="form-sheet-cancel" @click="closeForm">取消</span>
+          <span class="form-sheet-title">{{ isEditing ? '编辑人情往来' : '新增人情往来' }}</span>
+          <span class="form-sheet-confirm" @click="handleSubmit">确定</span>
+        </div>
 
-        <van-form @submit="handleSubmit" ref="formRef">
-          <van-cell-group inset>
-            <van-field
-              v-model="form.type_name"
-              is-link
-              readonly
-              required
-              label="类型"
-              placeholder="请选择类型"
-              @click="showTypePicker = true"
-              :rules="[{ required: true, message: '请选择类型' }]"
-            />
-            <van-field
-              v-model="form.record_date"
-              is-link
-              readonly
-              required
-              label="日期"
-              placeholder="请选择日期"
-              @click="showDatePicker = true"
-              :rules="[{ required: true, message: '请选择日期' }]"
-            />
-
-            <template v-if="formCategory === 'money'">
-              <van-field
-                v-model="form.amount"
-                type="number"
-                required
-                label="金额"
-                placeholder="请输入金额"
-                :rules="[{ required: true, message: '请输入金额' }, { validator: validateAmount, message: '金额必须大于0' }]"
-              >
-                <template #left-icon>
-                  <span>￥</span>
-                </template>
-              </van-field>
-            </template>
-
-            <template v-if="formCategory === 'gift'">
-              <van-field
-                v-model="form.gift_name"
-                required
-                label="礼物名称"
-                placeholder="请输入礼物名称"
-                :rules="[{ required: true, message: '请输入礼物名称' }]"
-              />
-              <van-field label="礼物图片">
-                <template #input>
-                  <div class="gift-image-upload">
-                    <div v-if="form.gift_image" class="gift-image-preview">
-                      <img :src="form.gift_image" class="gift-image-thumb" />
-                      <span class="gift-image-remove" @click="removeGiftImage">×</span>
-                    </div>
-                    <van-button v-else size="small" type="primary" @click="triggerFileInput">上传图片</van-button>
-                    <input ref="fileInput" type="file" accept="image/*" style="display: none" @change="handleFileChange" />
-                  </div>
-                </template>
-              </van-field>
-            </template>
-
-            <van-field
-              v-model="form.remark"
-              label="备注"
-              type="textarea"
-              placeholder="请输入备注（可选）"
-              rows="2"
-              autosize
-            />
-          </van-cell-group>
-
-          <div class="form-footer">
-            <van-button block type="primary" native-type="submit" :loading="submitting">
-              {{ isEditing ? '保存修改' : '确认新增' }}
-            </van-button>
+        <div class="form-sheet-body">
+          <div class="form-item-wrap">
+            <label class="form-item-label"><span class="required">*</span> 类型</label>
+            <div class="form-item-value picker-value" @click="onTypeOpen">
+              {{ form.type_name || '请选择类型' }}
+              <span class="picker-arrow">›</span>
+            </div>
           </div>
-        </van-form>
+
+          <div class="form-item-wrap">
+            <label class="form-item-label"><span class="required">*</span> 日期</label>
+            <div class="form-item-value picker-value" @click="onDateOpen">
+              {{ form.record_date || '请选择日期' }}
+              <span class="picker-arrow">›</span>
+            </div>
+          </div>
+
+          <div v-if="formCategory === 'money'" class="form-item-wrap">
+            <label class="form-item-label"><span class="required">*</span> 金额</label>
+            <div class="form-item-value">
+              <span class="amount-prefix">￥</span>
+              <input
+                type="number"
+                class="form-input-inline"
+                v-model="form.amount"
+                placeholder="请输入金额"
+                step="0.01"
+                min="0"
+              />
+            </div>
+          </div>
+
+          <div v-if="formCategory === 'gift'" class="form-item-wrap">
+            <label class="form-item-label"><span class="required">*</span> 礼物名称</label>
+            <div class="form-item-value">
+              <input
+                type="text"
+                class="form-input-inline"
+                v-model="form.gift_name"
+                placeholder="请输入礼物名称"
+                maxlength="50"
+              />
+            </div>
+          </div>
+
+          <div v-if="formCategory === 'gift'" class="form-item-wrap">
+            <label class="form-item-label">礼物图片</label>
+            <div class="form-item-value">
+              <div class="gift-image-upload">
+                <div v-if="form.gift_image" class="gift-image-preview">
+                  <img :src="form.gift_image" class="gift-image-thumb" />
+                  <span class="gift-image-remove" @click="removeGiftImage">×</span>
+                </div>
+                <button v-else type="button" class="upload-btn" @click="triggerFileInput">上传图片</button>
+                <input ref="fileInput" type="file" accept="image/*" style="display: none" @change="handleFileChange" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-item-wrap">
+            <label class="form-item-label">备注</label>
+            <div class="form-item-value">
+              <textarea
+                class="form-textarea"
+                v-model="form.remark"
+                placeholder="请输入备注（可选）"
+                rows="2"
+                maxlength="500"
+              ></textarea>
+            </div>
+          </div>
+        </div>
       </div>
-    </van-popup>
+    </div>
 
-    <van-popup v-model:show="showTypePicker" position="bottom" round>
-      <van-picker
-        :columns="typeColumns"
-        @confirm="onTypeConfirm"
-        @cancel="showTypePicker = false"
-        title="选择类型"
-      />
-    </van-popup>
+    <div v-if="showTypePicker" class="form-mask" @click.self="showTypePicker = false">
+      <div class="picker-sheet">
+        <div class="picker-header">
+          <span class="picker-cancel" @click="showTypePicker = false">取消</span>
+          <span class="picker-title">选择类型</span>
+          <span class="picker-confirm" @click="confirmTypePicker">确定</span>
+        </div>
+        <div class="picker-body">
+          <div class="picker-columns">
+            <div class="picker-column">
+              <div
+                v-for="(group, gi) in typeColumns"
+                :key="gi"
+                class="picker-option"
+                :class="{ active: tempTypeGroup === gi }"
+                @click="tempTypeGroup = gi; tempTypeValue = group.children[0]?.value"
+              >
+                {{ group.text }}
+              </div>
+            </div>
+            <div class="picker-column">
+              <div
+                v-for="opt in typeColumns[tempTypeGroup]?.children"
+                :key="opt.value"
+                class="picker-option"
+                :class="{ active: tempTypeValue === opt.value }"
+                @click="tempTypeValue = opt.value"
+              >
+                {{ opt.text }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <van-popup v-model:show="showDatePicker" position="bottom" round>
-      <van-date-picker
-        v-model="datePickerValue"
-        @confirm="onDateConfirm"
-        @cancel="showDatePicker = false"
-        title="选择日期"
-        :min-date="new Date(2000, 0, 1)"
-      />
-    </van-popup>
+    <div v-if="showDatePicker" class="form-mask" @click.self="showDatePicker = false">
+      <div class="picker-sheet">
+        <div class="picker-header">
+          <span class="picker-cancel" @click="showDatePicker = false">取消</span>
+          <span class="picker-title">选择日期</span>
+          <span class="picker-confirm" @click="confirmDatePicker">确定</span>
+        </div>
+        <div class="picker-body">
+          <div class="date-picker-wrap">
+            <input
+              type="date"
+              ref="nativeDateInput"
+              class="native-date-input"
+              :value="form.record_date"
+              @change="onNativeDateChange"
+              style="display:none"
+            />
+            <div class="date-selectors">
+              <select class="date-select" v-model="tempDateYear">
+                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
+              </select>
+              <select class="date-select" v-model="tempDateMonth">
+                <option v-for="m in 12" :key="m" :value="String(m).padStart(2,'0')">{{ m }}月</option>
+              </select>
+              <select class="date-select" v-model="tempDateDay">
+                <option v-for="d in daysInMonth" :key="d" :value="String(d).padStart(2,'0')">{{ d }}日</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -264,6 +314,7 @@ import Avatar from '../components/Avatar.vue'
 const router = useRouter()
 const route = useRoute()
 const loading = ref(true)
+const recordsLoading = ref(false)
 const person = ref(null)
 const statistics = ref({
   gift_count: 0,
@@ -278,12 +329,16 @@ const pagination = ref({ page: 1, pageSize: 5, total: 0, totalPages: 0 })
 const showForm = ref(false)
 const isEditing = ref(false)
 const editingId = ref(null)
-const submitting = ref(false)
-const formRef = ref(null)
 const fileInput = ref(null)
+const nativeDateInput = ref(null)
 
 const showTypePicker = ref(false)
 const showDatePicker = ref(false)
+const tempTypeGroup = ref(0)
+const tempTypeValue = ref('')
+const tempDateYear = ref('')
+const tempDateMonth = ref('')
+const tempDateDay = ref('')
 
 const form = ref({
   type: '',
@@ -329,40 +384,64 @@ typeColumns.forEach(group => {
   })
 })
 
+const TYPE_GROUP_MAP = {}
+typeColumns.forEach((group, gi) => {
+  group.children.forEach(item => {
+    TYPE_GROUP_MAP[item.value] = gi
+  })
+})
+
 const formCategory = computed(() => {
   if (!form.value.type) return ''
   const moneyTypes = ['transfer', 'receive', 'lend', 'return_in', 'pay_for', 'reimburse', 'red_packet_out', 'red_packet_in']
   return moneyTypes.includes(form.value.type) ? 'money' : 'gift'
 })
 
-const datePickerValue = computed(() => {
-  const d = form.value.record_date ? new Date(form.value.record_date) : new Date()
-  return [String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')]
+const currentYear = new Date().getFullYear()
+const yearOptions = computed(() => {
+  const arr = []
+  for (let y = currentYear; y >= 2000; y--) arr.push(y)
+  return arr
 })
 
-function goBack() {
-  router.back()
+const daysInMonth = computed(() => {
+  const y = parseInt(tempDateYear.value) || currentYear
+  const m = parseInt(tempDateMonth.value) || 1
+  return new Date(y, m, 0).getDate()
+})
+
+function formatDateForInput(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return String(value).slice(0, 10)
+  }
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
-function goToEdit() {
-  router.push(`/people/edit/${route.params.id}`)
+function formatDateForDisplay(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return String(value).slice(0, 10)
+  }
+  return formatDateForInput(value)
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return String(dateStr).slice(0, 10)
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
-}
-
-function formatDateShort(dateStr) {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function formatDateTime(dateStr) {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return String(dateStr).slice(0, 10)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
@@ -370,6 +449,7 @@ function getDaysUntil(dateStr) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const targetDate = new Date(dateStr)
+  if (Number.isNaN(targetDate.getTime())) return 0
   targetDate.setFullYear(today.getFullYear())
   targetDate.setHours(0, 0, 0, 0)
   if (targetDate < today) {
@@ -393,6 +473,14 @@ function previewImage(url) {
   showImagePreview([url])
 }
 
+function goBack() {
+  router.back()
+}
+
+function goToEdit() {
+  router.push(`/people/edit/${route.params.id}`)
+}
+
 async function handleDelete() {
   try {
     await showConfirmDialog({
@@ -403,7 +491,6 @@ async function handleDelete() {
   } catch {
     return
   }
-
   try {
     showLoadingToast({ message: '删除中...', forbidClick: true })
     await deletePerson(route.params.id)
@@ -413,33 +500,41 @@ async function handleDelete() {
     }, 500)
   } catch (err) {
     console.error(err)
+    const msg = err?.message || '删除失败'
+    showToast(msg)
   } finally {
     closeToast()
+  }
+}
+
+function resetForm() {
+  form.value = {
+    type: '',
+    type_name: '',
+    record_date: '',
+    amount: '',
+    gift_name: '',
+    gift_image: '',
+    remark: ''
   }
 }
 
 function openAddForm() {
   isEditing.value = false
   editingId.value = null
-  form.value = {
-    type: '',
-    type_name: '',
-    record_date: formatDateShort(new Date().toISOString()),
-    amount: '',
-    gift_name: '',
-    gift_image: '',
-    remark: ''
-  }
+  resetForm()
+  form.value.record_date = formatDateForInput(new Date())
   showForm.value = true
 }
 
 function openEditForm(record) {
   isEditing.value = true
   editingId.value = record.id
+  resetForm()
   form.value = {
     type: record.type,
     type_name: record.type_name,
-    record_date: formatDateShort(record.record_date),
+    record_date: formatDateForInput(record.record_date),
     amount: record.amount ? String(record.amount) : '',
     gift_name: record.gift_name || '',
     gift_image: record.gift_image || '',
@@ -448,10 +543,29 @@ function openEditForm(record) {
   showForm.value = true
 }
 
-function onTypeConfirm({ selectedValues, selectedOptions }) {
-  const value = selectedValues[selectedValues.length - 1]
-  form.value.type = value
-  form.value.type_name = TYPE_NAME_MAP[value] || value
+function closeForm() {
+  showForm.value = false
+  resetForm()
+}
+
+function onTypeOpen() {
+  if (form.value.type) {
+    tempTypeGroup.value = TYPE_GROUP_MAP[form.value.type] ?? 0
+    tempTypeValue.value = form.value.type
+  } else {
+    tempTypeGroup.value = 0
+    tempTypeValue.value = typeColumns[0].children[0].value
+  }
+  showTypePicker.value = true
+}
+
+function confirmTypePicker() {
+  if (!tempTypeValue.value) {
+    showToast('请选择类型')
+    return
+  }
+  form.value.type = tempTypeValue.value
+  form.value.type_name = TYPE_NAME_MAP[tempTypeValue.value] || tempTypeValue.value
   if (formCategory.value === 'money') {
     form.value.gift_name = ''
     form.value.gift_image = ''
@@ -461,13 +575,56 @@ function onTypeConfirm({ selectedValues, selectedOptions }) {
   showTypePicker.value = false
 }
 
-function onDateConfirm({ selectedValues }) {
-  form.value.record_date = selectedValues.join('-')
+function onDateOpen() {
+  const dateStr = form.value.record_date || formatDateForInput(new Date())
+  const parts = dateStr.split('-')
+  tempDateYear.value = parts[0] || String(currentYear)
+  tempDateMonth.value = parts[1] || '01'
+  tempDateDay.value = parts[2] || '01'
+  showDatePicker.value = true
+}
+
+function confirmDatePicker() {
+  const y = tempDateYear.value
+  const m = tempDateMonth.value
+  let d = tempDateDay.value
+  const maxDay = new Date(parseInt(y), parseInt(m), 0).getDate()
+  if (parseInt(d) > maxDay) d = String(maxDay).padStart(2, '0')
+  form.value.record_date = `${y}-${m}-${d}`
   showDatePicker.value = false
 }
 
-function validateAmount(val) {
-  return parseFloat(val) > 0
+function onNativeDateChange(e) {
+  form.value.record_date = e.target.value
+}
+
+function validateRecordForm() {
+  if (!form.value.type) {
+    showToast('请选择人情往来类型')
+    return false
+  }
+  if (!form.value.record_date) {
+    showToast('请选择日期')
+    return false
+  }
+  if (formCategory.value === 'money') {
+    if (!form.value.amount || form.value.amount === '') {
+      showToast('请输入金额')
+      return false
+    }
+    const amt = parseFloat(form.value.amount)
+    if (Number.isNaN(amt) || amt <= 0) {
+      showToast('金额必须大于0')
+      return false
+    }
+  }
+  if (formCategory.value === 'gift') {
+    if (!form.value.gift_name || !form.value.gift_name.trim()) {
+      showToast('请输入礼物名称')
+      return false
+    }
+  }
+  return true
 }
 
 function triggerFileInput() {
@@ -486,7 +643,8 @@ async function handleFileChange(e) {
     showToast('上传成功')
   } catch (err) {
     console.error(err)
-    showToast('上传失败')
+    const msg = err?.message || '上传失败'
+    showToast(msg)
   } finally {
     closeToast()
   }
@@ -498,17 +656,20 @@ function removeGiftImage() {
 }
 
 async function handleSubmit() {
-  submitting.value = true
+  if (!validateRecordForm()) return
+
   try {
+    showLoadingToast({ message: '保存中...', forbidClick: true })
+
     const formData = new FormData()
     formData.append('type', form.value.type)
     formData.append('record_date', form.value.record_date)
     formData.append('remark', form.value.remark || '')
 
     if (formCategory.value === 'money') {
-      formData.append('amount', form.value.amount)
+      formData.append('amount', String(parseFloat(form.value.amount).toFixed(2)))
     } else {
-      formData.append('gift_name', form.value.gift_name)
+      formData.append('gift_name', form.value.gift_name.trim())
       if (form.value.gift_image && !form.value.gift_image.startsWith('data:')) {
         formData.append('gift_image', form.value.gift_image)
       }
@@ -523,11 +684,14 @@ async function handleSubmit() {
     }
 
     showForm.value = false
+    resetForm()
     await refreshData()
   } catch (err) {
     console.error(err)
+    const msg = err?.message || '保存失败，请重试'
+    showToast(msg)
   } finally {
-    submitting.value = false
+    closeToast()
   }
 }
 
@@ -541,13 +705,17 @@ async function handleDeleteRecord(record) {
   } catch {
     return
   }
-
   try {
+    showLoadingToast({ message: '删除中...', forbidClick: true })
     await deleteRelationshipRecord(record.id)
+    closeToast()
     showToast('删除成功')
     await refreshData()
   } catch (err) {
+    closeToast()
     console.error(err)
+    const msg = err?.message || '删除失败'
+    showToast(msg)
   }
 }
 
@@ -557,11 +725,16 @@ function changePage(page) {
 
 async function loadRecords(page = 1) {
   try {
+    recordsLoading.value = true
     const res = await getRelationshipRecords(route.params.id, page, 5)
     records.value = res.data.list
     pagination.value = res.data.pagination
   } catch (e) {
     console.error(e)
+    const msg = e?.message || '加载人情往来记录失败'
+    showToast(msg)
+  } finally {
+    recordsLoading.value = false
   }
 }
 
@@ -586,7 +759,8 @@ async function loadData() {
     await Promise.all([loadRecords(1), loadStatistics()])
   } catch (e) {
     console.error(e)
-    showToast('加载失败')
+    const msg = e?.message || '加载失败'
+    showToast(msg)
   } finally {
     loading.value = false
   }
@@ -750,40 +924,18 @@ onMounted(() => {
   color: var(--text-color-3);
 }
 
-.stat-income .stat-value {
-  color: #07c160;
-}
-
-.stat-expense .stat-value {
-  color: #ee0a24;
-}
-
-.stat-net-positive .stat-value {
-  color: #07c160;
-}
-
-.stat-net-negative .stat-value {
-  color: #ee0a24;
-}
-
-.stat-anniv .stat-value {
-  color: #ff976a;
-}
-
-.stat-gift .stat-value {
-  color: #1989fa;
-}
+.stat-income .stat-value { color: #07c160; }
+.stat-expense .stat-value { color: #ee0a24; }
+.stat-net-positive .stat-value { color: #07c160; }
+.stat-net-negative .stat-value { color: #ee0a24; }
+.stat-anniv .stat-value { color: #ff976a; }
+.stat-gift .stat-value { color: #1989fa; }
 
 .record-card {
   background-color: var(--white);
   border-radius: 12px;
   padding: 14px 16px;
   margin-bottom: 10px;
-  cursor: pointer;
-}
-
-.record-card:active {
-  background-color: #f5f5f5;
 }
 
 .record-header {
@@ -801,25 +953,10 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.tag-income {
-  background-color: #e8f8ee;
-  color: #07c160;
-}
-
-.tag-expense {
-  background-color: #fef0f0;
-  color: #ee0a24;
-}
-
-.tag-receive {
-  background-color: #e8f3ff;
-  color: #1989fa;
-}
-
-.tag-give {
-  background-color: #fff7e8;
-  color: #ff976a;
-}
+.tag-income { background-color: #e8f8ee; color: #07c160; }
+.tag-expense { background-color: #fef0f0; color: #ee0a24; }
+.tag-receive { background-color: #e8f3ff; color: #1989fa; }
+.tag-give { background-color: #fff7e8; color: #ff976a; }
 
 .record-date {
   font-size: 12px;
@@ -838,13 +975,8 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.amount-income {
-  color: #07c160;
-}
-
-.amount-expense {
-  color: #ee0a24;
-}
+.amount-income { color: #07c160; }
+.amount-expense { color: #ee0a24; }
 
 .record-gift-name {
   font-size: 15px;
@@ -878,13 +1010,8 @@ onMounted(() => {
   cursor: pointer;
 }
 
-.record-action-btn.edit {
-  color: var(--primary-color);
-}
-
-.record-action-btn.delete {
-  color: var(--danger-color);
-}
+.record-action-btn.edit { color: var(--primary-color); }
+.record-action-btn.delete { color: var(--danger-color); }
 
 .pagination {
   display: flex;
@@ -892,6 +1019,21 @@ onMounted(() => {
   justify-content: center;
   gap: 16px;
   padding: 16px 0;
+}
+
+.page-btn {
+  padding: 6px 14px;
+  background-color: var(--white);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .page-info {
@@ -914,15 +1056,8 @@ onMounted(() => {
   margin-bottom: 8px;
 }
 
-.anniv-type-tag.birthday {
-  background-color: #fff0e6;
-  color: #ff6034;
-}
-
-.anniv-type-tag.custom {
-  background-color: #e8f3ff;
-  color: #1989fa;
-}
+.anniv-type-tag.birthday { background-color: #fff0e6; color: #ff6034; }
+.anniv-type-tag.custom { background-color: #e8f3ff; color: #1989fa; }
 
 .anniv-title {
   font-size: 16px;
@@ -943,20 +1078,119 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.form-container {
-  padding: 20px 0 30px;
+.form-mask {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
-.form-title {
-  font-size: 18px;
+.form-sheet {
+  background-color: var(--background-color);
+  border-radius: 16px 16px 0 0;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.form-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--white);
+  border-radius: 16px 16px 0 0;
+}
+
+.form-sheet-cancel {
+  font-size: 15px;
+  color: var(--text-color-3);
+  cursor: pointer;
+}
+
+.form-sheet-title {
+  font-size: 16px;
   font-weight: 600;
-  text-align: center;
-  padding: 0 16px 16px;
   color: var(--text-color);
 }
 
-.form-footer {
-  padding: 16px;
+.form-sheet-confirm {
+  font-size: 15px;
+  color: var(--primary-color);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.form-sheet-body {
+  padding: 8px 0 24px;
+}
+
+.form-item-wrap {
+  background-color: var(--white);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.form-item-label {
+  display: block;
+  font-size: 14px;
+  color: var(--text-color-2);
+  margin-bottom: 6px;
+}
+
+.required {
+  color: var(--danger-color);
+  margin-right: 2px;
+}
+
+.form-item-value {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  color: var(--text-color);
+  min-height: 28px;
+}
+
+.picker-value {
+  cursor: pointer;
+  justify-content: space-between;
+}
+
+.picker-arrow {
+  color: var(--text-color-3);
+  font-size: 18px;
+  transform: rotate(90deg);
+}
+
+.form-input-inline {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  color: var(--text-color);
+  background: transparent;
+  padding: 0;
+}
+
+.amount-prefix {
+  color: var(--text-color);
+  margin-right: 4px;
+  font-size: 15px;
+}
+
+.form-textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  color: var(--text-color);
+  background: transparent;
+  resize: none;
+  padding: 0;
+  font-family: inherit;
 }
 
 .gift-image-upload {
@@ -991,5 +1225,104 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
   line-height: 1;
+}
+
+.upload-btn {
+  padding: 6px 14px;
+  background-color: var(--primary-color);
+  color: var(--white);
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.picker-sheet {
+  background-color: var(--white);
+  border-radius: 16px 16px 0 0;
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.picker-cancel {
+  font-size: 15px;
+  color: var(--text-color-3);
+  cursor: pointer;
+}
+
+.picker-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.picker-confirm {
+  font-size: 15px;
+  color: var(--primary-color);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.picker-body {
+  padding: 8px 0 24px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.picker-columns {
+  display: flex;
+}
+
+.picker-column {
+  flex: 1;
+  max-height: 300px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-color);
+}
+
+.picker-column:last-child {
+  border-right: none;
+}
+
+.picker-option {
+  padding: 12px 16px;
+  font-size: 15px;
+  color: var(--text-color-2);
+  text-align: center;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.picker-option.active {
+  color: var(--primary-color);
+  background-color: #e8f3ff;
+  font-weight: 500;
+}
+
+.date-picker-wrap {
+  padding: 16px;
+}
+
+.date-selectors {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.date-select {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 15px;
+  background-color: var(--white);
+  color: var(--text-color);
+  outline: none;
 }
 </style>

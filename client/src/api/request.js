@@ -25,8 +25,12 @@ service.interceptors.response.use(
     return res
   },
   (error) => {
-    showToast(error.message || '网络错误')
-    return Promise.reject(error)
+    let msg = error.message || '网络错误'
+    if (error.response && error.response.data && error.response.data.message) {
+      msg = error.response.data.message
+    }
+    showToast(msg)
+    return Promise.reject(new Error(msg))
   }
 )
 
