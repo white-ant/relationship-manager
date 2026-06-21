@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const peopleRoutes = require('./routes/people');
 const anniversaryRoutes = require('./routes/anniversaries');
+const relationshipRecordRoutes = require('./routes/relationship-records');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/people', peopleRoutes);
 app.use('/api/anniversaries', anniversaryRoutes);
+app.use('/api', relationshipRecordRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

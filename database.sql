@@ -63,3 +63,50 @@ INSERT INTO `anniversaries` (`person_id`, `title`, `date`, `type`) VALUES
 (1, '相识纪念日', '2018-05-20', 'custom'),
 (2, '结婚纪念日', '2015-10-01', 'custom'),
 (3, '入职纪念日', '2020-07-15', 'custom');
+
+-- ============================================
+-- 人情往来记录表
+-- ============================================
+DROP TABLE IF EXISTS `relationship_records`;
+CREATE TABLE `relationship_records` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `person_id` INT UNSIGNED NOT NULL COMMENT '人物ID',
+  `category` VARCHAR(10) NOT NULL COMMENT '分类：money-资金往来, gift-礼物/人情往来',
+  `type` VARCHAR(20) NOT NULL COMMENT '具体类型: transfer/receive/lend/return_in/pay_for/reimburse/red_packet_out/red_packet_in/gift_in/gift_out/treat/treated/help/helped',
+  `type_name` VARCHAR(20) NOT NULL COMMENT '类型中文名称',
+  `direction` VARCHAR(10) NOT NULL COMMENT '方向：income-收入, expense-支出, neutral-中立',
+  `amount` DECIMAL(10,2) DEFAULT NULL COMMENT '金额，资金类必填',
+  `gift_name` VARCHAR(100) DEFAULT NULL COMMENT '礼物名称，礼物类必填',
+  `gift_image` VARCHAR(255) DEFAULT NULL COMMENT '礼物图片URL',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+  `record_date` DATE NOT NULL COMMENT '记录日期',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_person_id` (`person_id`),
+  KEY `idx_category` (`category`),
+  KEY `idx_record_date` (`record_date`),
+  KEY `idx_person_date` (`person_id`, `record_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='人情往来记录表';
+
+-- ============================================
+-- 人情往来示例数据
+-- ============================================
+
+-- 张伟的人情往来
+INSERT INTO `relationship_records` (`person_id`, `category`, `type`, `type_name`, `direction`, `amount`, `gift_name`, `gift_image`, `remark`, `record_date`) VALUES
+(1, 'money', 'transfer', '转账', 'expense', 200.00, NULL, NULL, '生日红包', '2026-06-15'),
+(1, 'money', 'return_in', '还入', 'income', 100.00, NULL, NULL, '归还之前借款', '2026-05-20'),
+(1, 'gift', 'gift_out', '送礼', 'neutral', NULL, '生日蛋糕', NULL, '生日当天送的', '2026-06-15'),
+(1, 'gift', 'gift_in', '收礼', 'neutral', NULL, '茶叶', NULL, '收到龙井茶叶一盒', '2026-03-10');
+
+-- 李娜的人情往来
+INSERT INTO `relationship_records` (`person_id`, `category`, `type`, `type_name`, `direction`, `amount`, `gift_name`, `gift_image`, `remark`, `record_date`) VALUES
+(2, 'money', 'red_packet_out', '红包支出', 'expense', 500.00, NULL, NULL, '春节红包', '2026-01-29'),
+(2, 'money', 'receive', '收款', 'income', 200.00, NULL, NULL, '代购物退款', '2026-04-12'),
+(2, 'gift', 'treat', '请客', 'neutral', NULL, NULL, NULL, '请全家吃饭', '2026-02-14');
+
+-- 王强的人情往来
+INSERT INTO `relationship_records` (`person_id`, `category`, `type`, `type_name`, `direction`, `amount`, `gift_name`, `gift_image`, `remark`, `record_date`) VALUES
+(3, 'money', 'lend', '借出', 'expense', 1000.00, NULL, NULL, '临时周转', '2026-05-01'),
+(3, 'gift', 'helped', '被帮忙', 'neutral', NULL, NULL, NULL, '帮忙搬家', '2026-04-18');
