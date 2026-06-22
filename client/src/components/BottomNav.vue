@@ -21,7 +21,8 @@ const route = useRoute()
 const navItems = [
   { path: '/', label: '首页', icon: '📅' },
   { path: '/people', label: '人物', icon: '👥' },
-  { path: '/anniversaries', label: '纪念', icon: '🎂' }
+  { path: '/anniversaries', label: '纪念', icon: '🎂' },
+  { path: '/relation-graph', label: '关系图', icon: '🕸️' }
 ]
 
 function isActive(path) {

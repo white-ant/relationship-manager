@@ -11,6 +11,7 @@
 - 添加人物：`screenshots/add-person.png`
 - 人物详情：`screenshots/person-detail.png`
 - 纪念日列表：`screenshots/anniversaries.png`
+- 关系图谱：`screenshots/relation-graph.png`
 
 ## 技术栈
 
@@ -20,6 +21,7 @@
 - **UI 组件库**: Vant 4
 - **路由**: Vue Router 4
 - **HTTP 请求**: Axios
+- **关系图谱**: Cytoscape.js
 
 ### 后端
 - **运行环境**: Node.js
@@ -36,8 +38,15 @@ relationship-manager/
 ├── client/                 # 前端项目
 │   ├── src/
 │   │   ├── api/            # API 接口封装
+│   │   │   ├── personRelations.js  # 人物关系接口
+│   │   │   └── ...
 │   │   ├── components/     # 公共组件
+│   │   │   ├── Avatar.vue  # 头像组件
+│   │   │   └── BottomNav.vue # 底部导航
 │   │   ├── pages/          # 页面组件
+│   │   │   ├── RelationGraphPage.vue # 关系图谱页面
+│   │   │   └── PersonDetailPage.vue  # 人物详情（含关系管理）
+│   │   │   └── ...
 │   │   ├── router/         # 路由配置
 │   │   ├── styles/         # 全局样式
 │   │   ├── App.vue         # 根组件
@@ -48,7 +57,9 @@ relationship-manager/
 ├── server/                 # 后端项目
 │   ├── routes/             # 路由接口
 │   │   ├── people.js       # 人物相关接口
-│   │   └── anniversaries.js # 纪念日相关接口
+│   │   ├── anniversaries.js # 纪念日相关接口
+│   │   ├── person-relations.js # 人物关系接口
+│   │   └── relationship-records.js # 人情往来接口
 │   ├── uploads/            # 头像上传目录
 │   ├── .env                # 环境变量配置
 │   ├── .env.example        # 环境变量示例
@@ -116,8 +127,11 @@ source /path/to/database.sql
 
 该 SQL 文件会自动：
 1. 创建 `relationship_manager` 数据库
-2. 创建 `people`（人物表）和 `anniversaries`（纪念日表）
-3. 插入 5 条示例人物数据和对应的纪念日数据
+2. 创建 `people`（人物表）、`anniversaries`（纪念日表）、`relationship_records`（人情往来记录表）、`person_relations`（人物关系表）
+3. 创建默认人物「我」（id = 1）
+4. 插入示例人物数据、纪念日数据、人情往来数据、人物关系示例数据
+
+> 注意：如果已存在旧版本数据库，需要重新导入 SQL 才能获得 person_relations 表和示例关系数据。
 
 ## 启动后端
 
@@ -290,6 +304,130 @@ npm run dev
 }
 ```
 返回对象的 key 为日期（1-31），value 为当天的纪念日数组。
+
+---
+
+### 人物关系相关接口
+
+#### 1. 获取某个人物的关系列表
+- **URL**: `GET /api/people/:personId/relations`
+- **参数**: `personId` - 人物 ID
+- **响应数据**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "id": 1,
+      "source_person_id": 1,
+      "target_person_id": 7,
+      "relation_name": "我的朋友",
+      "remark": null,
+      "target_name": "小明",
+      "target_avatar": null,
+      "target_relation": "朋友",
+      "target_birthday": "1991-04-20",
+      "created_at": "2024-01-01T00:00:00.000Z",
+      "updated_at": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+#### 2. 新增人物关系
+- **URL**: `POST /api/people/:personId/relations`
+- **请求体**:
+```json
+{
+  "target_person_id": 7,
+  "relation_name": "我的朋友",
+  "remark": ""
+}
+```
+- **校验**:
+  - `target_person_id` 必填，且对应人物必须存在
+  - `relation_name` 必填
+
+#### 3. 编辑人物关系
+- **URL**: `PUT /api/person-relations/:id`
+- **参数**: `id` - 关系记录 ID
+- **请求体**:
+```json
+{
+  "target_person_id": 7,
+  "relation_name": "我的好朋友",
+  "remark": "备注信息"
+}
+```
+
+#### 4. 删除人物关系
+- **URL**: `DELETE /api/person-relations/:id`
+- **参数**: `id` - 关系记录 ID
+- **删除前校验关系记录是否存在**
+
+#### 5. 获取全量关系图数据
+- **URL**: `GET /api/relation-graph`
+- **响应数据**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "nodes": [
+      {
+        "id": 1,
+        "name": "我",
+        "avatar": null,
+        "relation": "自己",
+        "birthday": "1990-01-01"
+      }
+    ],
+    "edges": [
+      {
+        "id": 1,
+        "source": 1,
+        "target": 7,
+        "label": "我的朋友"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 人情往来相关接口
+
+详见代码中 `relationshipRecords.js` API 封装及后端路由。
+
+## 功能使用说明
+
+### 关系图谱功能
+
+1. **入口位置**: 底部导航栏「关系图」标签
+2. **功能特点**:
+   - 可视化展示所有人物节点及相互关系连线
+   - 节点显示人物头像（无头像时显示名字首字的彩色圆形头像）和姓名
+   - 连线显示关系称呼（如：我的朋友、小明的爸爸）
+   - 支持拖动节点调整位置
+   - 支持拖动画布平移查看
+   - 支持双指缩放 / 鼠标滚轮缩放 / 右上角按钮放大缩小
+   - 点击节点跳转到对应人物详情页
+   - 无数据时显示空状态提示
+   - 加载失败时显示友好错误提示和重试按钮
+
+3. **人物关系管理**:
+   - 进入任意人物详情页
+   - 找到「人物关系」模块
+   - 点击「+ 新增关系」可添加该人物与其他人的关系
+   - 每条关系支持编辑和删除（删除需二次确认）
+   - 关联人物必选，关系称呼必填
+
+4. **默认人物「我」**:
+   - 数据库初始化时自动创建名字为「我」的人物（id = 1）
+   - 作为关系网络的中心节点
+   - 在「我」的人物卡片中可以继续添加与亲友的关系
 
 ## 后续开发计划
 

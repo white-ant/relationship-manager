@@ -36,6 +36,12 @@ const routes = [
     name: 'Anniversaries',
     component: () => import('@/pages/AnniversariesPage.vue'),
     meta: { title: '纪念', showNav: true }
+  },
+  {
+    path: '/relation-graph',
+    name: 'RelationGraph',
+    component: () => import('@/pages/RelationGraphPage.vue'),
+    meta: { title: '关系图', showNav: true }
   }
 ]
 

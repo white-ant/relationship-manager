@@ -140,6 +140,37 @@
           <div class="anniv-days">距离还有 {{ getDaysUntil(anniv.date) }} 天</div>
         </div>
       </div>
+
+      <div class="section-header" style="margin-top: 24px;">
+        <div class="section-title">人物关系</div>
+        <div class="add-record-btn" @click="openAddRelationForm">+ 新增关系</div>
+      </div>
+
+      <div v-if="relationsLoading" class="empty-tip">加载中...</div>
+      <div v-else-if="personRelations.length === 0" class="empty-tip">
+        暂无人物关系
+      </div>
+
+      <div v-else>
+        <div
+          v-for="rel in personRelations"
+          :key="rel.id"
+          class="relation-card"
+        >
+          <div class="relation-main" @click="goToPerson(rel.target_person_id)">
+            <Avatar :name="rel.target_name" :avatar="rel.target_avatar" size="sm" />
+            <div class="relation-info">
+              <div class="relation-name">{{ rel.target_name }}</div>
+              <div class="relation-label">{{ rel.relation_name }}</div>
+              <div v-if="rel.remark" class="relation-remark">{{ rel.remark }}</div>
+            </div>
+          </div>
+          <div class="relation-actions">
+            <span class="record-action-btn edit" @click.stop="openEditRelationForm(rel)">编辑</span>
+            <span class="record-action-btn delete" @click.stop="handleDeleteRelation(rel)">删除</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div v-if="showForm" class="form-mask" @click.self="closeForm">
@@ -225,6 +256,58 @@
       </div>
     </div>
 
+    <div v-if="showRelationForm" class="form-mask" @click.self="closeRelationForm">
+      <div class="form-sheet">
+        <div class="form-sheet-header">
+          <span class="form-sheet-cancel" @click="closeRelationForm">取消</span>
+          <span class="form-sheet-title">{{ isEditingRelation ? '编辑人物关系' : '新增人物关系' }}</span>
+          <span class="form-sheet-confirm" @click="handleRelationSubmit">确定</span>
+        </div>
+
+        <div class="form-sheet-body">
+          <div class="form-item-wrap">
+            <label class="form-item-label"><span class="required">*</span> 关联人物</label>
+            <div class="form-item-value">
+              <select class="relation-select" v-model="relationForm.target_person_id">
+                <option value="">请选择人物</option>
+                <option
+                  v-for="p in allPeople"
+                  :key="p.id"
+                  :value="p.id"
+                >{{ p.name }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-item-wrap">
+            <label class="form-item-label"><span class="required">*</span> 关系称呼</label>
+            <div class="form-item-value">
+              <input
+                type="text"
+                class="form-input-inline"
+                v-model="relationForm.relation_name"
+                placeholder="请输入关系称呼"
+                maxlength="100"
+              />
+            </div>
+          </div>
+
+          <div class="form-item-wrap">
+            <label class="form-item-label">备注</label>
+            <div class="form-item-value">
+              <textarea
+                class="form-textarea"
+                v-model="relationForm.remark"
+                placeholder="请输入备注（可选）"
+                rows="2"
+                maxlength="500"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showTypePicker" class="form-mask" @click.self="showTypePicker = false">
       <div class="picker-sheet">
         <div class="picker-header">
@@ -300,7 +383,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { showToast, showConfirmDialog, showLoadingToast, closeToast, showImagePreview } from 'vant'
-import { getPersonDetail, deletePerson } from '../api/people'
+import { getPersonDetail, deletePerson, getPeopleList } from '../api/people'
 import {
   getRelationshipRecords,
   addRelationshipRecord,
@@ -309,6 +392,12 @@ import {
   getPersonStatistics,
   uploadFile
 } from '../api/relationshipRecords'
+import {
+  getPersonRelations,
+  addPersonRelation,
+  updatePersonRelation,
+  deletePersonRelation
+} from '../api/personRelations'
 import Avatar from '../components/Avatar.vue'
 
 const router = useRouter()
@@ -748,7 +837,145 @@ async function loadStatistics() {
 }
 
 async function refreshData() {
-  await Promise.all([loadRecords(pagination.value.page), loadStatistics()])
+  await Promise.all([loadRecords(pagination.value.page), loadStatistics(), loadPersonRelations()])
+}
+
+const relationsLoading = ref(false)
+const personRelations = ref([])
+const allPeople = ref([])
+const showRelationForm = ref(false)
+const isEditingRelation = ref(false)
+const editingRelationId = ref(null)
+const relationForm = ref({
+  target_person_id: '',
+  relation_name: '',
+  remark: ''
+})
+
+function goToPerson(personId) {
+  if (personId) {
+    router.push(`/people/${personId}`)
+  }
+}
+
+async function loadPersonRelations() {
+  try {
+    relationsLoading.value = true
+    const res = await getPersonRelations(route.params.id)
+    personRelations.value = res.data
+  } catch (e) {
+    const msg = e?.message || '加载人物关系失败'
+    showToast(msg)
+  } finally {
+    relationsLoading.value = false
+  }
+}
+
+async function loadAllPeople() {
+  try {
+    const res = await getPeopleList()
+    allPeople.value = res.data
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+function resetRelationForm() {
+  relationForm.value = {
+    target_person_id: '',
+    relation_name: '',
+    remark: ''
+  }
+}
+
+function openAddRelationForm() {
+  isEditingRelation.value = false
+  editingRelationId.value = null
+  resetRelationForm()
+  showRelationForm.value = true
+}
+
+function openEditRelationForm(rel) {
+  isEditingRelation.value = true
+  editingRelationId.value = rel.id
+  resetRelationForm()
+  relationForm.value = {
+    target_person_id: rel.target_person_id,
+    relation_name: rel.relation_name,
+    remark: rel.remark || ''
+  }
+  showRelationForm.value = true
+}
+
+function closeRelationForm() {
+  showRelationForm.value = false
+  resetRelationForm()
+}
+
+function validateRelationForm() {
+  if (!relationForm.value.target_person_id) {
+    showToast('请选择关联人物')
+    return false
+  }
+  if (!relationForm.value.relation_name || !relationForm.value.relation_name.trim()) {
+    showToast('请输入关系称呼')
+    return false
+  }
+  return true
+}
+
+async function handleRelationSubmit() {
+  if (!validateRelationForm()) return
+
+  try {
+    showLoadingToast({ message: '保存中...', forbidClick: true })
+
+    const data = {
+      target_person_id: relationForm.value.target_person_id,
+      relation_name: relationForm.value.relation_name.trim(),
+      remark: relationForm.value.remark || ''
+    }
+
+    if (isEditingRelation.value) {
+      await updatePersonRelation(editingRelationId.value, data)
+      showToast('修改成功')
+    } else {
+      await addPersonRelation(route.params.id, data)
+      showToast('新增成功')
+    }
+
+    showRelationForm.value = false
+    resetRelationForm()
+    await loadPersonRelations()
+  } catch (err) {
+    const msg = err?.message || '保存失败，请重试'
+    showToast(msg)
+  } finally {
+    closeToast()
+  }
+}
+
+async function handleDeleteRelation(rel) {
+  try {
+    await showConfirmDialog({
+      title: '确认删除',
+      message: `确定要删除与${rel.target_name}的关系"${rel.relation_name}"吗？`,
+      confirmButtonColor: '#ee0a24'
+    })
+  } catch {
+    return
+  }
+  try {
+    showLoadingToast({ message: '删除中...', forbidClick: true })
+    await deletePersonRelation(rel.id)
+    closeToast()
+    showToast('删除成功')
+    await loadPersonRelations()
+  } catch (err) {
+    closeToast()
+    const msg = err?.message || '删除失败'
+    showToast(msg)
+  }
 }
 
 async function loadData() {
@@ -756,7 +983,7 @@ async function loadData() {
     loading.value = true
     const res = await getPersonDetail(route.params.id)
     person.value = res.data
-    await Promise.all([loadRecords(1), loadStatistics()])
+    await Promise.all([loadRecords(1), loadStatistics(), loadPersonRelations(), loadAllPeople()])
   } catch (e) {
     console.error(e)
     const msg = e?.message || '加载失败'
@@ -1324,5 +1551,67 @@ onMounted(() => {
   background-color: var(--white);
   color: var(--text-color);
   outline: none;
+}
+
+.relation-card {
+  background-color: var(--white);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.relation-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.relation-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.relation-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.relation-label {
+  font-size: 13px;
+  color: var(--primary-color);
+  margin-top: 2px;
+}
+
+.relation-remark {
+  font-size: 12px;
+  color: var(--text-color-3);
+  margin-top: 2px;
+}
+
+.relation-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.relation-select {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  color: var(--text-color);
+  background: transparent;
+  padding: 0;
+  appearance: auto;
+  -webkit-appearance: none;
+  min-height: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23969799' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  padding-right: 20px;
 }
 </style>

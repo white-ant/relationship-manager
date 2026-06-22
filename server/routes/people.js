@@ -232,6 +232,7 @@ router.delete('/:id', async (req, res) => {
 
     await connection.query('DELETE FROM anniversaries WHERE person_id = ?', [id]);
     await connection.query('DELETE FROM relationship_records WHERE person_id = ?', [id]);
+    await connection.query('DELETE FROM person_relations WHERE source_person_id = ? OR target_person_id = ?', [id, id]);
     await connection.query('DELETE FROM people WHERE id = ?', [id]);
 
     await connection.commit();
